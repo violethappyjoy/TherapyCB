@@ -6,7 +6,11 @@ import pandas as pd
 import torch
 
 import datasets
-from transformers import BitsAndBytesConfig
+from trl import SFTTrainer
+from peft import LoraConfig, PeftModel
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          BitsAndBytesConfig, HfArgumentParser,
+                          TrainingArguments, logging, pipeline,EarlyStoppingCallback,IntervalStrategy)
 
 def _setHFToken():
     with open("../hf_token.txt", "r") as file:
@@ -32,14 +36,119 @@ def spiltDataset(dataset, train_ratio=0.8, test_ratio=0.1, seed=42):
         "valid": valid_dataset
     })
 
+os.environ['HF_TOKEN'] = _setHFToken()
+# Reference: https://github.com/phr-winter23/phr-mental-chat/blob/main/finetuneModel/SFTTrainer.py#L27
+
+dataset = load_from_disk("../dataset")
+dataset = spiltDataset(dataset)
+
+model_id = 'google/gemma-7b'
+new_model_id = 'Therapy_Gemma_7b_QLoRA'
+output_dir = "../results"
+
+epochs = 1
+per_device_train_batch_size =1
+per_device_eval_batch_size = 8
+max_seq_length = 1024
+## It says the effective batch size = per_device_train_batch_size * gradient_accumulation_steps, so we can increase the effective
+# ##batch size without running out of memory
+gradient_accumulation_steps=1
+## It saves memory by checkpointing the gradients (set to True if memory is an issue)
+gradient_checkpointing = True
+
+# Hyperparameters set as recommended in the qLoRA paper, B.2 Hyperparameters
+lora_r = 64
+lora_alpha = 16
+lora_dropout = 0.1
+use_4bit = True
+bnb_4bit_compute_dtype = "float16"
+bnb_4bit_quant_type = "nf4"
+use_nested_quant = False
+fp16 = False
+bf16 = False
+
+save_steps = 1000
+logging_steps = 25
+eval_steps = 1000
+
+max_grad_norm = 0.3
+learning_rate = 2e-5
+weight_decay = 0.001
+optim = "paged_adamw_8bit" ## paged optim to save memory 32bit or 8bit
+lr_scheduler_type = "cosine"
+max_steps = -1
+warmup_ratio = 0.03
+group_by_length = True
+compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+
+if torch.cuda.is_available():
+    device=torch.device(type='cuda',index=0)
+else:
+    device=torch.device(type='cpu',index=0)
+print(type(device))
 
 # 4 bit Normal Form
 # converting 32 bit to 4 bit
 # to balance loss of information due to quantization we keep the new fine-tuned params in 16 bit
 quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16
+    load_in_4bit=use_4bit,
+    bnb_4bit_quant_type=bnb_4bit_quant_type,
+    bnb_4bit_compute_dtype=compute_dtype,
+    bnb_4bit_use_double_quant=use_nested_quant,
 )
 
-model_id = 'google/gemma-7b'
+peft_config = LoraConfig(
+    lora_alpha=lora_alpha,
+    lora_dropout=lora_dropout,
+    r=lora_r,
+    bias="none",
+    task_type="CAUSAL_LM"
+)
+
+training_arguments = TrainingArguments(
+    output_dir=output_dir,
+    num_train_epochs=epochs,
+    per_device_train_batch_size=per_device_train_batch_size,
+    per_device_eval_batch_size=per_device_eval_batch_size,
+    evaluation_strategy="steps",
+    save_steps=save_steps,
+    eval_steps=eval_steps,
+    logging_steps=logging_steps,
+    learning_rate=learning_rate,
+    resume_from_checkpoint=True,
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss",
+    optim=optim,
+    weight_decay=weight_decay,
+    fp16=fp16,
+    bf16=bf16,
+    max_grad_norm=max_grad_norm,
+    gradient_accumulation_steps=gradient_accumulation_steps,
+    max_steps=max_steps,
+    warmup_ratio=warmup_ratio,
+    group_by_length=group_by_length,
+    lr_scheduler_type=lr_scheduler_type,
+    report_to="wandb",
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=quantization_config,
+    device_map = device,
+    token = os.environ['HF_TOKEN']
+)
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, token = os.environ['HF_TOKEN'])
+tokenizer.add_special_tokens({"pad_token":"<pad>"})
+model.resize_token_embeddings(len(tokenizer))
+
+trainer = SFTTrainer(
+    model=model,
+    train_dataset=dataset["train"],
+    eval_dataset=dataset['val'],
+    peft_config=peft_config,
+    max_seq_length=max_seq_length,
+    tokenizer=tokenizer,
+    args = training_arguments,
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.001)]
+)
