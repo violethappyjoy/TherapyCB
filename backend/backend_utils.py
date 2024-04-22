@@ -42,8 +42,8 @@ os.environ['HF_TOKEN'] = _setHFToken()
 dataset = load_from_disk("../dataset")
 dataset = spiltDataset(dataset)
 
-model_id = 'google/gemma-7b'
-new_model_id = 'Therapy_Gemma_7b_QLoRA'
+model_id = 'google/gemma-2b'
+new_model_id = 'Therapy_Gemma_2b_QLoRA'
 output_dir = "../results"
 
 epochs = 1
@@ -52,7 +52,7 @@ per_device_eval_batch_size = 8
 max_seq_length = 1024
 ## It says the effective batch size = per_device_train_batch_size * gradient_accumulation_steps, so we can increase the effective
 # ##batch size without running out of memory
-gradient_accumulation_steps=1
+gradient_accumulation_steps=4
 ## It saves memory by checkpointing the gradients (set to True if memory is an issue)
 gradient_checkpointing = True
 
@@ -64,12 +64,12 @@ use_4bit = True
 bnb_4bit_compute_dtype = "float16"
 bnb_4bit_quant_type = "nf4"
 use_nested_quant = False
-fp16 = False
+fp16 = True
 bf16 = False
 
-save_steps = 1000
-logging_steps = 25
-eval_steps = 1000
+save_steps = 500
+logging_steps = 10
+eval_steps = 500
 
 max_grad_norm = 0.3
 learning_rate = 2e-5
@@ -82,10 +82,13 @@ group_by_length = True
 compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
 
 if torch.cuda.is_available():
-    device=torch.device(type='cuda',index=0)
+    device = torch.device(type='cuda', index=0)
+    properties = torch.cuda.get_device_properties(device)
+    print("Using CUDA device:", device)
+    print("Total memory available:", properties.total_memory / (1024 * 1024), "MB")
 else:
-    device=torch.device(type='cpu',index=0)
-print(type(device))
+    device = torch.device(type='cpu', index=0)
+    print("Using CPU device:", device)
 
 # 4 bit Normal Form
 # converting 32 bit to 4 bit
@@ -142,13 +145,24 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, token = os.environ['HF_TOKEN
 tokenizer.add_special_tokens({"pad_token":"<pad>"})
 model.resize_token_embeddings(len(tokenizer))
 
+if torch.cuda.is_available():
+    device = torch.device(type='cuda', index=torch.cuda.current_device())
+    properties = torch.cuda.get_device_properties(device)
+    print("Current CUDA device:", device)
+    print("Total memory available:", properties.total_memory / (1024 * 1024), "MB")
+else:
+    print("CUDA is not available. Using CPU.")
+
+os.environ['PYTORCH_CUDA_ALLOC_CONF']='expandable_segments'
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset["train"],
-    eval_dataset=dataset['val'],
+    eval_dataset=dataset['valid'],
     peft_config=peft_config,
     max_seq_length=max_seq_length,
     tokenizer=tokenizer,
     args = training_arguments,
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.001)]
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.001)],
 )
