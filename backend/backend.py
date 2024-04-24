@@ -10,26 +10,9 @@ import wandb
 import datasets
 from trl import SFTTrainer
 from peft import LoraConfig, PeftModel
-from transformers.modeling_utils import ModuleUtilsMixin
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           BitsAndBytesConfig, HfArgumentParser,
                           TrainingArguments, logging, pipeline,EarlyStoppingCallback,IntervalStrategy)
-
-# MONKEY PATCHIN
-# def new_num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = True) -> int:
-#     total_numel = []
-#     for name, param in self.named_parameters():
-#         if not only_trainable or param.requires_grad:
-#             if exclude_embeddings and name.startswith("base_model."):
-#                 continue
-#             quant_storage = param.storage().cpu().numpy().dtype if param.is_quantized else param.storage().cpu().numpy().dtype
-#             nb_params = quant_storage.itemsize
-#             total_numel.append(param.numel() * nb_params)
-#     return sum(total_numel)
-
-# ModuleUtilsMixin.num_parameters = new_num_parameters
-
-#################
 
 def spiltDataset(dataset, train_ratio=0.8, test_ratio=0.1, seed=42):
     dataset = dataset.shuffle(seed=seed)
@@ -49,9 +32,7 @@ def spiltDataset(dataset, train_ratio=0.8, test_ratio=0.1, seed=42):
         "valid": valid_dataset
     })
 
-# tokenz = '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'
-os.environ['HF_TOKEN'] = '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'
-os.environ['WANDB_TOKEN'] = 'b3310490fdea1283957046098c23956ef9606e32'
+tokenz = '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'
 
 dataset = load_from_disk("../dataset")
 dataset = spiltDataset(dataset)
@@ -69,7 +50,7 @@ per_device_eval_batch_size = 8
 max_seq_length = 1024
 ## It says the effective batch size = per_device_train_batch_size * gradient_accumulation_steps, so we can increase the effective
 # ##batch size without running out of memory
-gradient_accumulation_steps=4
+gradient_accumulation_steps=1
 ## It saves memory by checkpointing the gradients (set to True if memory is an issue)
 gradient_checkpointing = False
 
@@ -155,15 +136,15 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=quantization_config,
     device_map = device,
-    token = os.environ['HF_TOKEN']
+    token = tokenz
 )
 
-tokenizer = AutoTokenizer.from_pretrained(model_id, token = os.environ['HF_TOKEN'])
+tokenizer = AutoTokenizer.from_pretrained(model_id, token = tokenz)
 tokenizer.add_special_tokens({"pad_token":"<pad>"})
 tokenizer.padding_side = 'right'
 model.resize_token_embeddings(len(tokenizer))
 
-wandb.login(key=os.environ['WANDB_TOKEN'])
+wandb.login(key='b3310490fdea1283957046098c23956ef9606e32')
 
 trainer = SFTTrainer(
     model=model,
@@ -172,6 +153,14 @@ trainer = SFTTrainer(
     peft_config=peft_config,
     max_seq_length=max_seq_length,
     tokenizer=tokenizer,
-    args=training_arguments,
+    args = training_arguments,
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.001)],
 )
+
+trainer.train()
+
+saved_model_name = 'Therapy_Gemma_2b_QLoRA'
+version = '_v0'
+new_model_name = saved_model_name+version
+print(new_model_name)
+trainer.save_model(new_model_name)
