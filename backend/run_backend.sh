@@ -26,7 +26,5 @@ conda activate /home/21bce026/Work/venv
 # cd Work/test
 
 # python backend.py
-python -m ipykernel install --user --name=venv
-pip install jupyterlab notebook
 
 jupyter-lab --no-browser --ip $(hostname -f)
