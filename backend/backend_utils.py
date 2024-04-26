@@ -50,16 +50,28 @@ def spiltDataset(dataset, train_ratio=0.8, test_ratio=0.1, seed=42):
     })
 
 # tokenz = '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'
-os.environ['HF_TOKEN'] = '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'
-os.environ['WANDB_TOKEN'] = 'b3310490fdea1283957046098c23956ef9606e32'
+def _setHFToken():
+    with open("../hf_token.txt", "r") as file:
+        token = file.read()      
+    return token
+os.environ['HF_TOKEN'] = _setHFToken()
+
+def _setWNDBToken():
+    with open("../wandb.txt", "r") as file:
+        token = file.read()        
+    return token
+os.environ['HF_TOKEN'] = _setHFToken()
+
+os.environ['WANDB_TOKEN'] = _setWNDBToken()
 
 dataset = load_from_disk("../dataset")
 dataset = spiltDataset(dataset)
 
 pprint(dataset)
 
-model_id = 'google/gemma-2b'
-new_model_id = 'Therapy_Gemma_2b_QLoRA'
+model_id = 'google/gemma-2b-it'
+tokenizer_id = 'philschmid/gemma-tokenizer-chatml'
+new_model_id = 'Therapy_Gemma_2bit_QLoRA'
 output_dir = "../results"
 model_dir = "./model_dir"
 
@@ -158,7 +170,7 @@ model = AutoModelForCausalLM.from_pretrained(
     token = os.environ['HF_TOKEN']
 )
 
-tokenizer = AutoTokenizer.from_pretrained(model_id, token = os.environ['HF_TOKEN'])
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, token = os.environ['HF_TOKEN'])
 tokenizer.add_special_tokens({"pad_token":"<pad>"})
 tokenizer.padding_side = 'right'
 model.resize_token_embeddings(len(tokenizer))
