@@ -49,7 +49,6 @@ def spiltDataset(dataset, train_ratio=0.8, test_ratio=0.1, seed=42):
         "valid": valid_dataset
     })
 
-# tokenz = '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'
 def _setHFToken():
     with open("../hf_token.txt", "r") as file:
         token = file.read()      
