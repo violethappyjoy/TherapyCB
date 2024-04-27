@@ -32,7 +32,19 @@ def spiltDataset(dataset, train_ratio=0.8, test_ratio=0.1, seed=42):
         "valid": valid_dataset
     })
 
-tokenz = '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'
+def _setHFToken():
+    with open("../hf_token.txt", "r") as file:
+        token = file.read()
+        
+    return token
+def _setWNDBToken():
+    with open("../wandb.txt", "r") as file:
+        token = file.read()        
+    return token
+
+wandbTokenz = _setWANDBToken()
+
+tokenz = _setHFToken()
 
 dataset = load_from_disk("../dataset")
 dataset = spiltDataset(dataset)
@@ -144,7 +156,7 @@ tokenizer.add_special_tokens({"pad_token":"<pad>"})
 tokenizer.padding_side = 'right'
 model.resize_token_embeddings(len(tokenizer))
 
-wandb.login(key='b3310490fdea1283957046098c23956ef9606e32')
+wandb.login(key=wandbTokenz)
 
 trainer = SFTTrainer(
     model=model,
