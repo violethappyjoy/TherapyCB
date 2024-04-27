@@ -8,15 +8,14 @@ from datasets import list_datasets, load_dataset
 from transformers import AutoTokenizer
 from pprint import pprint
 
-# def _setHFToken():
-#     with open("../hf_token.txt", "r") as file:
-#         token = file.read()
+def _setHFToken():
+    with open("../hf_token.txt", "r") as file:
+        token = file.read()
         
-#     return token
-# token = "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"
-# os.environ['HF_TOKEN']
+    return token
 
-tokenz = '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'
+
+tokenz = _setHFToken()
 dataset = load_dataset("jerryjalapeno/nart-100k-synthetic", split="train")
 pprint(dataset.info.__dict__)
 
