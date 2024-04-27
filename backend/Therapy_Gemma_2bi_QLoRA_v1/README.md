@@ -17,13 +17,13 @@ base_model: google/gemma-2b-it
 
 
 
-- **Developed by:** [More Information Needed]
+- **Developed by:** Divyanshu Bhardwaj
 - **Funded by [optional]:** [More Information Needed]
 - **Shared by [optional]:** [More Information Needed]
 - **Model type:** [More Information Needed]
 - **Language(s) (NLP):** [More Information Needed]
 - **License:** [More Information Needed]
-- **Finetuned from model [optional]:** [More Information Needed]
+- **Finetuned from model [optional]:** Gemma-2b-it
 
 ### Model Sources [optional]
 
